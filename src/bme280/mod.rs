@@ -65,7 +65,7 @@ const RESET_VALUE: u8 = 0xB6;
 #[repr(u8)]
 pub enum HumidityOverSamplingControl {
     Skipped = 0b00000_000,
-    OverSampling1 = 0b00000_001,
+    OverSampling1 = 0b00000_001, // usual
     OverSampling2 = 0b00000_010,
     OverSampling4 = 0b00000_011,
     OverSampling8 = 0b00000_100,
@@ -82,7 +82,7 @@ enum StatusBit {
 #[repr(u8)]
 pub enum TemperatureOverSamplingControl {
     Skipped = 0b000_00000,
-    OverSampling1 = 0b001_00000,
+    OverSampling1 = 0b001_00000, // usual
     OverSampling2 = 0b010_00000,
     OverSampling4 = 0b011_00000,
     OverSampling8 = 0b100_00000,
@@ -93,7 +93,7 @@ pub enum TemperatureOverSamplingControl {
 #[repr(u8)]
 pub enum PressureOverSamplingControl {
     Skipped = 0b000_000_00,
-    OverSampling1 = 0b000_001_00,
+    OverSampling1 = 0b000_001_00, // usual
     OverSampling2 = 0b000_010_00,
     OverSampling4 = 0b000_011_00,
     OverSampling8 = 0b000_100_00,
@@ -105,7 +105,7 @@ pub enum PressureOverSamplingControl {
 pub enum SensorModeControl {
     Sleep = 0b000000_00,
     Forced = 0b000000_10,
-    Normal = 0b000000_11,
+    Normal = 0b000000_11, // usual
 }
 
 /// for Config
@@ -116,7 +116,7 @@ pub enum InactiveDurationControl {
     Ms125 = 0b010_00000,
     Ms250 = 0b011_00000,
     Ms500 = 0b100_00000,
-    Ms1000 = 0b101_00000,
+    Ms1000 = 0b101_00000, // usual
     Ms10 = 0b110_00000,
     Ms20 = 0b111_00000,
 }
@@ -124,7 +124,7 @@ pub enum InactiveDurationControl {
 /// for Config
 #[repr(u8)]
 pub enum InfiniteImpulseResponseControl {
-    Off = 0b000_000_00,
+    Off = 0b000_000_00, // usual
     Coefficient2 = 0b000_001_00,
     Coefficient4 = 0b000_010_00,
     Coefficient8 = 0b000_011_00,
@@ -135,7 +135,7 @@ pub enum InfiniteImpulseResponseControl {
 #[repr(u8)]
 pub enum Spi3 {
     Enable = 0b0000000_1,
-    Disable = 0b0000000_0,
+    Disable = 0b0000000_0, // usual
 }
 
 const CALIBRATIONS: [RegisterAddress; 32] = [
@@ -173,7 +173,7 @@ const CALIBRATIONS: [RegisterAddress; 32] = [
     RegisterAddress::H6,
 ];
 
-pub trait I2cProxy {
+pub trait I2c {
     fn write_i2c_block_data(&mut self, reg: RegisterAddress, data: &[u8]) -> Bme280Result<()>;
     fn write_byte_data(&mut self, reg: RegisterAddress, data: u8) -> Bme280Result<()>;
     fn read_byte_data(&mut self, reg: RegisterAddress) -> Bme280Result<u8>;
@@ -219,10 +219,52 @@ impl Status {
     }
 }
 
+pub struct SetUp {
+    humidity_sampling: HumidityOverSamplingControl,
+    temperature_sampling: TemperatureOverSamplingControl,
+    pressure_sampling: PressureOverSamplingControl,
+    sensor_mode: SensorModeControl,
+    duration: InactiveDurationControl,
+    iir: InfiniteImpulseResponseControl,
+    spi: Spi3,
+}
+
+impl Default for SetUp {
+    fn default() -> Self {
+        Self {
+            humidity_sampling: HumidityOverSamplingControl::OverSampling1,
+            temperature_sampling: TemperatureOverSamplingControl::OverSampling1,
+            pressure_sampling: PressureOverSamplingControl::OverSampling1,
+            sensor_mode: SensorModeControl::Normal,
+            duration: InactiveDurationControl::Ms1000,
+            iir: InfiniteImpulseResponseControl::Off,
+            spi: Spi3::Disable,
+        }
+    }
+}
+
 pub trait Bme280 {
-    type I2c: I2cProxy;
+    type I2c: I2c;
 
     fn i2c(&mut self) -> &mut Self::I2c;
+
+    fn set_up(&mut self, params: SetUp) -> Bme280Result<()> {
+        let SetUp {
+            humidity_sampling,
+            temperature_sampling,
+            pressure_sampling,
+            sensor_mode,
+            duration,
+            iir,
+            spi,
+        } = params;
+
+        self.set_hum_control(humidity_sampling)?;
+        self.set_measure_control(temperature_sampling, pressure_sampling, sensor_mode)?;
+        self.set_config(duration, iir, spi)?;
+
+        Ok(())
+    }
 
     fn reset(&mut self) -> Bme280Result<()> {
         self.i2c()
@@ -230,16 +272,13 @@ pub trait Bme280 {
         Ok(())
     }
 
-    fn set_hum_control(&mut self, sampling: HumidityOverSamplingControl) -> Bme280Result<()> {
+    fn set_hum_control(
+        &mut self,
+        humidity_sampling: HumidityOverSamplingControl,
+    ) -> Bme280Result<()> {
         self.i2c()
-            .write_byte_data(RegisterAddress::CtrlHum, sampling as u8)?;
+            .write_byte_data(RegisterAddress::CtrlHum, humidity_sampling as u8)?;
         Ok(())
-    }
-
-    // TODO(mmmpa): generate status
-    fn get_status(&mut self) -> Bme280Result<Status> {
-        let re = self.i2c().read_byte_data(RegisterAddress::Status)?;
-        Ok(Status::new(re))
     }
 
     fn set_measure_control(
@@ -266,6 +305,11 @@ pub trait Bme280 {
             duration as u8 | iir as u8 | spi as u8,
         )?;
         Ok(())
+    }
+
+    fn get_status(&mut self) -> Bme280Result<Status> {
+        let re = self.i2c().read_byte_data(RegisterAddress::Status)?;
+        Ok(Status::new(re))
     }
 
     fn fetch_calibration(&mut self) -> Bme280Result<Calibrator> {

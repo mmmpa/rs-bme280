@@ -1,4 +1,4 @@
-use crate::{Bme280, Bme280Error, Bme280Result, I2cProxy, RegisterAddress};
+use crate::{Bme280, Bme280Error, Bme280Result, I2c, RegisterAddress};
 use i2cdev::core::I2CDevice;
 use i2cdev::linux::{LinuxI2CDevice, LinuxI2CError};
 
@@ -6,7 +6,7 @@ pub struct Bme280Client {
     i2c_cli: LinuxI2CDevice,
 }
 
-impl I2cProxy for Bme280Client {
+impl I2c for Bme280Client {
     fn write_i2c_block_data(&mut self, reg: RegisterAddress, data: &[u8]) -> Bme280Result<()> {
         self.i2c_cli.smbus_write_block_data(reg as u8, data)?;
         Ok(())
