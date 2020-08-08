@@ -61,6 +61,84 @@ pub enum RegisterAddress {
     H6 = 0xE7,
 }
 
+const RESET_VALUE: u8 = 0xB6;
+
+#[repr(u8)]
+pub enum HumidityOverSamplingControl {
+    Skipped = 0b00000_000,
+    OverSampling1 = 0b00000_001,
+    OverSampling2 = 0b00000_010,
+    OverSampling4 = 0b00000_011,
+    OverSampling8 = 0b00000_100,
+    OverSampling16 = 0b00000_101,
+}
+
+#[repr(u8)]
+enum Status {
+    InMeasuringStatus = 0b0000_1_000,
+    InImageUpdatingStatus = 0b0000000_1,
+}
+
+/// for CtrlMeas
+#[repr(u8)]
+pub enum TemperatureOverSamplingControl {
+    Skipped = 0b000_00000,
+    OverSampling1 = 0b001_00000,
+    OverSampling2 = 0b010_00000,
+    OverSampling4 = 0b011_00000,
+    OverSampling8 = 0b100_00000,
+    OverSampling16 = 0b101_00000,
+}
+
+/// for CtrlMeas
+#[repr(u8)]
+pub enum PressureOverSamplingControl {
+    Skipped = 0b000_000_00,
+    OverSampling1 = 0b000_001_00,
+    OverSampling2 = 0b000_010_00,
+    OverSampling4 = 0b000_011_00,
+    OverSampling8 = 0b000_100_00,
+    OverSampling16 = 0b000_101_00,
+}
+
+/// for CtrlMeas
+#[repr(u8)]
+pub enum SensorModeControl {
+    Sleep = 0b000000_00,
+    Forced = 0b000000_10,
+    Normal = 0b000000_11,
+}
+
+/// for Config
+#[repr(u8)]
+pub enum InactiveDurationControl {
+    Ms0 = 0b000_00000,  // 0.5ms
+    Ms62 = 0b001_00000, // 62.5ms
+    Ms125 = 0b010_00000,
+    Ms250 = 0b011_00000,
+    Ms500 = 0b100_00000,
+    Ms1000 = 0b101_00000,
+    Ms10 = 0b110_00000,
+    Ms20 = 0b111_00000,
+}
+
+/// for Config
+#[repr(u8)]
+pub enum InfiniteImpulseResponseControl {
+    Off = 0b000_000_00,
+    Coefficient2 = 0b000_001_00,
+    Coefficient4 = 0b000_010_00,
+    Coefficient8 = 0b000_011_00,
+    Coefficient16 = 0b000_100_00,
+}
+
+/// for Config
+#[repr(u8)]
+pub enum Spi3 {
+    Enable = 0b0000000_1,
+    Disable = 0b0000000_0,
+}
+
 const CALIBRATIONS: [RegisterAddress; 32] = [
     RegisterAddress::T1L,
     RegisterAddress::T1H,
