@@ -1,8 +1,7 @@
 mod error;
 
+use crate::Bme280Result;
 pub use error::*;
-
-use crate::*;
 
 #[repr(u8)]
 #[derive(Copy, Clone)]
@@ -74,7 +73,7 @@ pub enum HumidityOverSamplingControl {
 }
 
 #[repr(u8)]
-enum Status {
+enum StatusBit {
     InMeasuringStatus = 0b0000_1_000,
     InImageUpdatingStatus = 0b0000000_1,
 }
@@ -174,11 +173,11 @@ const CALIBRATIONS: [RegisterAddress; 32] = [
     RegisterAddress::H6,
 ];
 
-pub trait I2c {
-    fn write_i2c_block_data(&self, reg: RegisterAddress, data: &[u8]) -> Bme280Result<()>;
-    fn write_byte_data(&self, reg: RegisterAddress, data: u8) -> Bme280Result<()>;
-    fn read_byte_data(&self, reg: RegisterAddress) -> Bme280Result<u8>;
-    fn read_i2c_block_data(&self, reg: RegisterAddress, data: &mut [u8]) -> Bme280Result<()>;
+pub trait I2cProxy {
+    fn write_i2c_block_data(&mut self, reg: RegisterAddress, data: &[u8]) -> Bme280Result<()>;
+    fn write_byte_data(&mut self, reg: RegisterAddress, data: u8) -> Bme280Result<()>;
+    fn read_byte_data(&mut self, reg: RegisterAddress) -> Bme280Result<u8>;
+    fn read_i2c_block_data(&mut self, reg: RegisterAddress, data: &mut [u8]) -> Bme280Result<()>;
 }
 
 pub struct Calibrator {
@@ -204,12 +203,72 @@ pub struct Calibrator {
     pub h6: f64, // i8,
 }
 
+pub struct Status(u8);
+
+impl Status {
+    pub fn new(raw: u8) -> Self {
+        Self(raw)
+    }
+
+    pub fn is_in_measuring(&self) -> bool {
+        self.0 & StatusBit::InMeasuringStatus as u8 != 0
+    }
+
+    pub fn is_in_updating(&self) -> bool {
+        self.0 & StatusBit::InImageUpdatingStatus as u8 != 0
+    }
+}
+
 pub trait Bme280 {
-    type I2c: I2c;
+    type I2c: I2cProxy;
 
-    fn i2c(&self) -> &Self::I2c;
+    fn i2c(&mut self) -> &mut Self::I2c;
 
-    fn fetch_calibration(&self) -> Bme280Result<Calibrator> {
+    fn reset(&mut self) -> Bme280Result<()> {
+        self.i2c()
+            .write_byte_data(RegisterAddress::Reset, RESET_VALUE)?;
+        Ok(())
+    }
+
+    fn set_hum_control(&mut self, sampling: HumidityOverSamplingControl) -> Bme280Result<()> {
+        self.i2c()
+            .write_byte_data(RegisterAddress::CtrlHum, sampling as u8)?;
+        Ok(())
+    }
+
+    // TODO(mmmpa): generate status
+    fn get_status(&mut self) -> Bme280Result<Status> {
+        let re = self.i2c().read_byte_data(RegisterAddress::Status)?;
+        Ok(Status::new(re))
+    }
+
+    fn set_measure_control(
+        &mut self,
+        temp: TemperatureOverSamplingControl,
+        press: PressureOverSamplingControl,
+        mode: SensorModeControl,
+    ) -> Bme280Result<()> {
+        self.i2c().write_byte_data(
+            RegisterAddress::CtrlMeas,
+            temp as u8 | press as u8 | mode as u8,
+        )?;
+        Ok(())
+    }
+
+    fn set_config(
+        &mut self,
+        duration: InactiveDurationControl,
+        iir: InfiniteImpulseResponseControl,
+        spi: Spi3,
+    ) -> Bme280Result<()> {
+        self.i2c().write_byte_data(
+            RegisterAddress::Config,
+            duration as u8 | iir as u8 | spi as u8,
+        )?;
+        Ok(())
+    }
+
+    fn fetch_calibration(&mut self) -> Bme280Result<Calibrator> {
         let mut bytes = [0u8; 32];
         for (i, reg) in CALIBRATIONS.iter().enumerate() {
             let v = self.i2c().read_byte_data(*reg)?;
@@ -264,7 +323,7 @@ pub trait Bme280 {
         })
     }
 
-    fn get_results(&self) -> Bme280Result<(AdcTemperature, AdcHumidity, AdcPressure)> {
+    fn get_results(&mut self) -> Bme280Result<(AdcTemperature, AdcHumidity, AdcPressure)> {
         let adc_t = self.get_adc_temperature()?;
         let adc_h = self.get_adc_humidity()?;
         let adc_p = self.get_adc_pressure()?;
@@ -273,7 +332,7 @@ pub trait Bme280 {
     }
 
     fn get_calibrated_results(
-        &self,
+        &mut self,
         calibrator: &Calibrator,
     ) -> Bme280Result<(Temperature, Humidity, Pressure)> {
         let (adc_t, adc_h, adc_p) = self.get_results()?;
@@ -285,14 +344,14 @@ pub trait Bme280 {
         Ok((t, h, p))
     }
 
-    fn get_adc_humidity(&self) -> Bme280Result<AdcHumidity> {
+    fn get_adc_humidity(&mut self) -> Bme280Result<AdcHumidity> {
         let l = self.i2c().read_byte_data(RegisterAddress::HumL)? as u16;
         let m = self.i2c().read_byte_data(RegisterAddress::HumM)? as u16;
 
         Ok(AdcHumidity((l << 8) | m))
     }
 
-    fn get_adc_pressure(&self) -> Bme280Result<AdcPressure> {
+    fn get_adc_pressure(&mut self) -> Bme280Result<AdcPressure> {
         let l = self.i2c().read_byte_data(RegisterAddress::PressL)? as u32;
         let m = self.i2c().read_byte_data(RegisterAddress::PressM)? as u32;
         let xl = self.i2c().read_byte_data(RegisterAddress::PressXl)? as u32;
@@ -300,7 +359,7 @@ pub trait Bme280 {
         Ok(AdcPressure((l << 12) | (m << 4) | (xl >> 4)))
     }
 
-    fn get_adc_temperature(&self) -> Bme280Result<AdcTemperature> {
+    fn get_adc_temperature(&mut self) -> Bme280Result<AdcTemperature> {
         let l = self.i2c().read_byte_data(RegisterAddress::TempL)? as u32;
         let m = self.i2c().read_byte_data(RegisterAddress::TempM)? as u32;
         let xl = self.i2c().read_byte_data(RegisterAddress::TempXl)? as u32;
@@ -308,6 +367,7 @@ pub trait Bme280 {
         Ok(AdcTemperature((l << 12) | (m << 4) | (xl >> 4)))
     }
 }
+
 fn calibrate_humidity(
     calibrator: &Calibrator,
     adc_h: AdcHumidity,

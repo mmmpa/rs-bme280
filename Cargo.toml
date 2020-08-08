@@ -7,7 +7,7 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+i2cdev = { version = "0.4.4", optional = true }
 
 [features]
-std = []
-
+std = ["i2cdev"]
