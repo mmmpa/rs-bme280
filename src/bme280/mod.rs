@@ -186,32 +186,44 @@ pub trait Bme280 {
         })
     }
 
-    fn get_humidity(&self) -> Bme280Result<u16> {
+    fn get_results(&self) -> Bme280Result<(Temperature, Humidity, Pressure)> {
+        let adc_t = self.get_temperature()?;
+        let adc_h = self.get_humidity()?;
+        let adc_p = self.get_pressure()?;
+
+        let (t, fine_t) = self.calibrate_temperature(adc_t);
+        let h = self.calibrate_humidity(adc_h, fine_t);
+        let p = self.calibrate_pressure(adc_p, fine_t);
+
+        Ok((t, h, p))
+    }
+
+    fn get_humidity(&self) -> Bme280Result<AdcHumidity> {
         let l = self.i2c().read_byte_data(RegisterAddress::HumL)? as u16;
         let m = self.i2c().read_byte_data(RegisterAddress::HumM)? as u16;
 
-        Ok((l << 8) | m)
+        Ok(AdcHumidity((l << 8) | m))
     }
 
-    fn get_pressure(&self) -> Bme280Result<u32> {
+    fn get_pressure(&self) -> Bme280Result<AdcPressure> {
         let l = self.i2c().read_byte_data(RegisterAddress::PressL)? as u32;
         let m = self.i2c().read_byte_data(RegisterAddress::PressM)? as u32;
         let xl = self.i2c().read_byte_data(RegisterAddress::PressXl)? as u32;
 
-        Ok((l << 12) | (m << 4) | (xl >> 4))
+        Ok(AdcPressure((l << 12) | (m << 4) | (xl >> 4)))
     }
 
-    fn get_temperature(&self) -> Bme280Result<u32> {
+    fn get_temperature(&self) -> Bme280Result<AdcTemperature> {
         let l = self.i2c().read_byte_data(RegisterAddress::TempL)? as u32;
         let m = self.i2c().read_byte_data(RegisterAddress::TempM)? as u32;
         let xl = self.i2c().read_byte_data(RegisterAddress::TempXl)? as u32;
 
-        Ok((l << 12) | (m << 4) | (xl >> 4))
+        Ok(AdcTemperature((l << 12) | (m << 4) | (xl >> 4)))
     }
 
     fn calibrator(&self) -> &Calibrator;
 
-    fn calibrate_humidity(&self, adc_h: u16, t_fine: FineTemperature) -> Humidity {
+    fn calibrate_humidity(&self, adc_h: AdcHumidity, t_fine: FineTemperature) -> Humidity {
         let Calibrator {
             h1,
             h2,
@@ -222,7 +234,7 @@ pub trait Bme280 {
             ..
         } = self.calibrator();
 
-        let adc_h = adc_h as f64;
+        let adc_h = *adc_h.as_ref() as f64;
 
         let mut var_h = t_fine.as_ref() - 76800.0;
         var_h = (adc_h - (h4 * 64.0 + h5 / 16384.0 * var_h))
@@ -237,7 +249,7 @@ pub trait Bme280 {
         Humidity(var_h)
     }
 
-    fn calibrate_pressure(&self, adc_p: u16, t_fine: FineTemperature) -> Pressure {
+    fn calibrate_pressure(&self, adc_p: AdcPressure, t_fine: FineTemperature) -> Pressure {
         let Calibrator {
             p1,
             p2,
@@ -251,7 +263,7 @@ pub trait Bme280 {
             ..
         } = self.calibrator();
 
-        let adc_p = adc_p as f64;
+        let adc_p = *adc_p.as_ref() as f64;
 
         let mut var1 = t_fine.as_ref() / 2.0 - 64000.0;
         let mut var2 = var1 * var1 * (p6) / 32768.0;
@@ -271,10 +283,10 @@ pub trait Bme280 {
         Pressure(p)
     }
 
-    fn calibrate_temperature(&self, adc_t: u16) -> (Temperature, FineTemperature) {
+    fn calibrate_temperature(&self, adc_t: AdcTemperature) -> (Temperature, FineTemperature) {
         let Calibrator { t1, t2, t3, .. } = self.calibrator();
 
-        let adc_t = adc_t as f64;
+        let adc_t = *adc_t.as_ref() as f64;
 
         let var1 = (adc_t / 16384.0 - t1 / 1024.0) * t2;
         let var2 = ((adc_t / 131072.0 - t1 / 8192.0) * (adc_t / 131072.0 - t1 / 8192.0)) * t3;
@@ -285,10 +297,39 @@ pub trait Bme280 {
     }
 }
 
+#[derive(Copy, Clone)]
+pub struct AdcTemperature(u32);
+#[derive(Copy, Clone)]
+pub struct AdcPressure(u32);
+#[derive(Copy, Clone)]
+pub struct AdcHumidity(u16);
+
+#[derive(Copy, Clone)]
 pub struct Temperature(f64);
+#[derive(Copy, Clone)]
 pub struct FineTemperature(f64);
+#[derive(Copy, Clone)]
 pub struct Pressure(f64);
+#[derive(Copy, Clone)]
 pub struct Humidity(f64);
+
+impl AsRef<u32> for AdcTemperature {
+    fn as_ref(&self) -> &u32 {
+        &self.0
+    }
+}
+
+impl AsRef<u32> for AdcPressure {
+    fn as_ref(&self) -> &u32 {
+        &self.0
+    }
+}
+
+impl AsRef<u16> for AdcHumidity {
+    fn as_ref(&self) -> &u16 {
+        &self.0
+    }
+}
 
 impl AsRef<f64> for Temperature {
     fn as_ref(&self) -> &f64 {
