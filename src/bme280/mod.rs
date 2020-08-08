@@ -131,7 +131,7 @@ pub trait Bme280 {
 
     fn i2c(&self) -> &Self::I2c;
 
-    fn get_calibration(&self) -> Bme280Result<Calibrator> {
+    fn fetch_calibration(&self) -> Bme280Result<Calibrator> {
         let mut bytes = [0u8; 32];
         for (i, reg) in CALIBRATIONS.iter().enumerate() {
             let v = self.i2c().read_byte_data(*reg)?;
@@ -209,7 +209,125 @@ pub trait Bme280 {
         Ok((l << 12) | (m << 4) | (xl >> 4))
     }
 
-    fn calibrate_humidity() -> u16;
-    fn calibrate_pressure() -> u16;
-    fn calibrate_temperature() -> u16;
+    fn calibrator(&self) -> &Calibrator;
+
+    fn calibrate_humidity(&self, adc_h: u16, t_fine: FineTemperature) -> Humidity {
+        let Calibrator {
+            h1,
+            h2,
+            h3,
+            h4,
+            h5,
+            h6,
+            ..
+        } = self.calibrator();
+
+        let adc_h = adc_h as f64;
+        let h1 = *h1 as f64;
+        let h2 = *h2 as f64;
+        let h3 = *h3 as f64;
+        let h4 = *h4 as f64;
+        let h5 = *h5 as f64;
+        let h6 = *h6 as f64;
+
+        let mut var_h = (t_fine.as_ref() - 76800.0);
+        var_h = (adc_h - (h4 * 64.0 + h5 / 16384.0 * var_h))
+            * (h2 / 65536.0 * (1.0 + h6 / 67108864.0 * var_h * (1.0 + h3 / 67108864.0 * var_h)));
+        var_h = var_h * (1.0 - h1 * var_h / 524288.0);
+        if var_h > 100.0 {
+            var_h = 100.0;
+        } else if var_h < 0.0 {
+            var_h = 0.0;
+        }
+
+        Humidity(var_h)
+    }
+
+    fn calibrate_pressure(&self, adc_p: u16, t_fine: FineTemperature) -> Pressure {
+        let Calibrator {
+            p1,
+            p2,
+            p3,
+            p4,
+            p5,
+            p6,
+            p7,
+            p8,
+            p9,
+            ..
+        } = self.calibrator();
+
+        let adc_p = adc_p as f64;
+        let p1 = *p1 as f64;
+        let p2 = *p2 as f64;
+        let p3 = *p3 as f64;
+        let p4 = *p4 as f64;
+        let p5 = *p5 as f64;
+        let p6 = *p6 as f64;
+        let p7 = *p7 as f64;
+        let p8 = *p8 as f64;
+        let p9 = *p9 as f64;
+
+        let mut var1 = (t_fine.as_ref() / 2.0) - 64000.0;
+        let mut var2 = var1 * var1 * (p6) / 32768.0;
+        var2 = var2 + var1 * (p5) * 2.0;
+        var2 = (var2 / 4.0) + ((p4) * 65536.0);
+        var1 = ((p3) * var1 * var1 / 524288.0 + (p2) * var1) / 524288.0;
+        var1 = (1.0 + var1 / 32768.0) * (p1);
+        if var1 == 0.0 {
+            return Pressure(0.0); // avoid exception caused by division by zero
+        }
+        let mut p = 1048576.0 - adc_p;
+        p = (p - (var2 / 4096.0)) * 6250.0 / var1;
+        var1 = (p9) * p * p / 2147483648.0;
+        var2 = p * (p8) / 32768.0;
+        p = p + (var1 + var2 + (p7)) / 16.0;
+
+        Pressure(p)
+    }
+
+    fn calibrate_temperature(&self, adc_t: u16) -> (Temperature, FineTemperature) {
+        let Calibrator { t1, t2, t3, .. } = self.calibrator();
+
+        let adc_t = adc_t as f64;
+        let t1 = *t1 as f64;
+        let t2 = *t2 as f64;
+        let t3 = *t3 as f64;
+
+        let var1 = (adc_t / 16384.0 - t1 / 1024.0) * t2;
+        let var2 = ((adc_t / 131072.0 - t1 / 8192.0) * (adc_t / 131072.0 - t1 / 8192.0)) * t3;
+        let t_fine = (var1 + var2);
+        let t = t_fine / 5120.0;
+
+        (Temperature(t), FineTemperature(t_fine))
+    }
+}
+
+pub struct Temperature(f64);
+pub struct FineTemperature(f64);
+pub struct Pressure(f64);
+pub struct Humidity(f64);
+
+impl AsRef<f64> for Temperature {
+    fn as_ref(&self) -> &f64 {
+        &self.0
+    }
+}
+
+impl AsRef<f64> for FineTemperature {
+    fn as_ref(&self) -> &f64 {
+        &self.0
+    }
+}
+
+impl AsRef<f64> for Pressure {
+    fn as_ref(&self) -> &f64 {
+        &self.0
+    }
+}
+
+impl AsRef<f64> for Humidity {
+    fn as_ref(&self) -> &f64 {
+        &self.0
+    }
 }
