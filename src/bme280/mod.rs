@@ -104,26 +104,26 @@ pub trait I2c {
 }
 
 pub struct Calibrator {
-    pub t1: u16,
-    pub t2: i16,
-    pub t3: i16,
+    pub t1: f64, // u16,
+    pub t2: f64, // i16,
+    pub t3: f64, // i16,
 
-    pub p1: u16,
-    pub p2: i16,
-    pub p3: i16,
-    pub p4: i16,
-    pub p5: i16,
-    pub p6: i16,
-    pub p7: i16,
-    pub p8: i16,
-    pub p9: i16,
+    pub p1: f64, // u16,
+    pub p2: f64, // i16,
+    pub p3: f64, // i16,
+    pub p4: f64, // i16,
+    pub p5: f64, // i16,
+    pub p6: f64, // i16,
+    pub p7: f64, // i16,
+    pub p8: f64, // i16,
+    pub p9: f64, // i16,
 
-    pub h1: u8,
-    pub h2: i16,
-    pub h3: u8,
-    pub h4: i16,
-    pub h5: i16,
-    pub h6: i8,
+    pub h1: f64, // u8,
+    pub h2: f64, // i16,
+    pub h3: f64, // u8,
+    pub h4: f64, // i16,
+    pub h5: f64, // i16,
+    pub h6: f64, // i8,
 }
 
 pub trait Bme280 {
@@ -165,24 +165,24 @@ pub trait Bme280 {
         let h6 = i8::from_be_bytes([bytes[31]]);
 
         Ok(Calibrator {
-            t1,
-            t2,
-            t3,
-            p1,
-            p2,
-            p3,
-            p4,
-            p5,
-            p6,
-            p7,
-            p8,
-            p9,
-            h1,
-            h2,
-            h3,
-            h4,
-            h5,
-            h6,
+            t1: t1 as f64,
+            t2: t2 as f64,
+            t3: t3 as f64,
+            p1: p1 as f64,
+            p2: p2 as f64,
+            p3: p3 as f64,
+            p4: p4 as f64,
+            p5: p5 as f64,
+            p6: p6 as f64,
+            p7: p7 as f64,
+            p8: p8 as f64,
+            p9: p9 as f64,
+            h1: h1 as f64,
+            h2: h2 as f64,
+            h3: h3 as f64,
+            h4: h4 as f64,
+            h5: h5 as f64,
+            h6: h6 as f64,
         })
     }
 
@@ -223,14 +223,8 @@ pub trait Bme280 {
         } = self.calibrator();
 
         let adc_h = adc_h as f64;
-        let h1 = *h1 as f64;
-        let h2 = *h2 as f64;
-        let h3 = *h3 as f64;
-        let h4 = *h4 as f64;
-        let h5 = *h5 as f64;
-        let h6 = *h6 as f64;
 
-        let mut var_h = (t_fine.as_ref() - 76800.0);
+        let mut var_h = t_fine.as_ref() - 76800.0;
         var_h = (adc_h - (h4 * 64.0 + h5 / 16384.0 * var_h))
             * (h2 / 65536.0 * (1.0 + h6 / 67108864.0 * var_h * (1.0 + h3 / 67108864.0 * var_h)));
         var_h = var_h * (1.0 - h1 * var_h / 524288.0);
@@ -258,17 +252,8 @@ pub trait Bme280 {
         } = self.calibrator();
 
         let adc_p = adc_p as f64;
-        let p1 = *p1 as f64;
-        let p2 = *p2 as f64;
-        let p3 = *p3 as f64;
-        let p4 = *p4 as f64;
-        let p5 = *p5 as f64;
-        let p6 = *p6 as f64;
-        let p7 = *p7 as f64;
-        let p8 = *p8 as f64;
-        let p9 = *p9 as f64;
 
-        let mut var1 = (t_fine.as_ref() / 2.0) - 64000.0;
+        let mut var1 = t_fine.as_ref() / 2.0 - 64000.0;
         let mut var2 = var1 * var1 * (p6) / 32768.0;
         var2 = var2 + var1 * (p5) * 2.0;
         var2 = (var2 / 4.0) + ((p4) * 65536.0);
@@ -290,13 +275,10 @@ pub trait Bme280 {
         let Calibrator { t1, t2, t3, .. } = self.calibrator();
 
         let adc_t = adc_t as f64;
-        let t1 = *t1 as f64;
-        let t2 = *t2 as f64;
-        let t3 = *t3 as f64;
 
         let var1 = (adc_t / 16384.0 - t1 / 1024.0) * t2;
         let var2 = ((adc_t / 131072.0 - t1 / 8192.0) * (adc_t / 131072.0 - t1 / 8192.0)) * t3;
-        let t_fine = (var1 + var2);
+        let t_fine = var1 + var2;
         let t = t_fine / 5120.0;
 
         (Temperature(t), FineTemperature(t_fine))
