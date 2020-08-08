@@ -186,14 +186,23 @@ pub trait Bme280 {
         })
     }
 
-    fn get_results(&self) -> Bme280Result<(Temperature, Humidity, Pressure)> {
+    fn get_results(&self) -> Bme280Result<(AdcTemperature, AdcHumidity, AdcPressure)> {
         let adc_t = self.get_temperature()?;
         let adc_h = self.get_humidity()?;
         let adc_p = self.get_pressure()?;
 
-        let (t, fine_t) = self.calibrate_temperature(adc_t);
-        let h = self.calibrate_humidity(adc_h, fine_t);
-        let p = self.calibrate_pressure(adc_p, fine_t);
+        Ok((adc_t, adc_h, adc_p))
+    }
+
+    fn get_calibrated_results(
+        &self,
+        calibrator: &Calibrator,
+    ) -> Bme280Result<(Temperature, Humidity, Pressure)> {
+        let (adc_t, adc_h, adc_p) = self.get_results()?;
+
+        let (t, fine_t) = calibrate_temperature(calibrator, adc_t);
+        let h = calibrate_humidity(calibrator, adc_h, fine_t);
+        let p = calibrate_pressure(calibrator, adc_p, fine_t);
 
         Ok((t, h, p))
     }
@@ -220,81 +229,89 @@ pub trait Bme280 {
 
         Ok(AdcTemperature((l << 12) | (m << 4) | (xl >> 4)))
     }
+}
+fn calibrate_humidity(
+    calibrator: &Calibrator,
+    adc_h: AdcHumidity,
+    t_fine: FineTemperature,
+) -> Humidity {
+    let Calibrator {
+        h1,
+        h2,
+        h3,
+        h4,
+        h5,
+        h6,
+        ..
+    } = calibrator;
 
-    fn calibrator(&self) -> &Calibrator;
+    let adc_h = *adc_h.as_ref() as f64;
 
-    fn calibrate_humidity(&self, adc_h: AdcHumidity, t_fine: FineTemperature) -> Humidity {
-        let Calibrator {
-            h1,
-            h2,
-            h3,
-            h4,
-            h5,
-            h6,
-            ..
-        } = self.calibrator();
-
-        let adc_h = *adc_h.as_ref() as f64;
-
-        let mut var_h = t_fine.as_ref() - 76800.0;
-        var_h = (adc_h - (h4 * 64.0 + h5 / 16384.0 * var_h))
-            * (h2 / 65536.0 * (1.0 + h6 / 67108864.0 * var_h * (1.0 + h3 / 67108864.0 * var_h)));
-        var_h = var_h * (1.0 - h1 * var_h / 524288.0);
-        if var_h > 100.0 {
-            var_h = 100.0;
-        } else if var_h < 0.0 {
-            var_h = 0.0;
-        }
-
-        Humidity(var_h)
+    let mut var_h = t_fine.as_ref() - 76800.0;
+    var_h = (adc_h - (h4 * 64.0 + h5 / 16384.0 * var_h))
+        * (h2 / 65536.0 * (1.0 + h6 / 67108864.0 * var_h * (1.0 + h3 / 67108864.0 * var_h)));
+    var_h = var_h * (1.0 - h1 * var_h / 524288.0);
+    if var_h > 100.0 {
+        var_h = 100.0;
+    } else if var_h < 0.0 {
+        var_h = 0.0;
     }
 
-    fn calibrate_pressure(&self, adc_p: AdcPressure, t_fine: FineTemperature) -> Pressure {
-        let Calibrator {
-            p1,
-            p2,
-            p3,
-            p4,
-            p5,
-            p6,
-            p7,
-            p8,
-            p9,
-            ..
-        } = self.calibrator();
+    Humidity(var_h)
+}
 
-        let adc_p = *adc_p.as_ref() as f64;
+fn calibrate_pressure(
+    calibrator: &Calibrator,
+    adc_p: AdcPressure,
+    t_fine: FineTemperature,
+) -> Pressure {
+    let Calibrator {
+        p1,
+        p2,
+        p3,
+        p4,
+        p5,
+        p6,
+        p7,
+        p8,
+        p9,
+        ..
+    } = calibrator;
 
-        let mut var1 = t_fine.as_ref() / 2.0 - 64000.0;
-        let mut var2 = var1 * var1 * (p6) / 32768.0;
-        var2 = var2 + var1 * (p5) * 2.0;
-        var2 = (var2 / 4.0) + ((p4) * 65536.0);
-        var1 = ((p3) * var1 * var1 / 524288.0 + (p2) * var1) / 524288.0;
-        var1 = (1.0 + var1 / 32768.0) * (p1);
-        if var1 == 0.0 {
-            return Pressure(0.0); // avoid exception caused by division by zero
-        }
-        let mut p = 1048576.0 - adc_p;
-        p = (p - (var2 / 4096.0)) * 6250.0 / var1;
-        var1 = (p9) * p * p / 2147483648.0;
-        var2 = p * (p8) / 32768.0;
-        p = p + (var1 + var2 + (p7)) / 16.0;
+    let adc_p = *adc_p.as_ref() as f64;
 
-        Pressure(p)
+    let mut var1 = t_fine.as_ref() / 2.0 - 64000.0;
+    let mut var2 = var1 * var1 * (p6) / 32768.0;
+    var2 = var2 + var1 * (p5) * 2.0;
+    var2 = (var2 / 4.0) + ((p4) * 65536.0);
+    var1 = ((p3) * var1 * var1 / 524288.0 + (p2) * var1) / 524288.0;
+    var1 = (1.0 + var1 / 32768.0) * (p1);
+    if var1 == 0.0 {
+        return Pressure(0.0); // avoid exception caused by division by zero
     }
+    let mut p = 1048576.0 - adc_p;
+    p = (p - (var2 / 4096.0)) * 6250.0 / var1;
+    var1 = (p9) * p * p / 2147483648.0;
+    var2 = p * (p8) / 32768.0;
+    p = p + (var1 + var2 + (p7)) / 16.0;
 
-    fn calibrate_temperature(&self, adc_t: AdcTemperature) -> (Temperature, FineTemperature) {
-        let Calibrator { t1, t2, t3, .. } = self.calibrator();
+    Pressure(p)
+}
 
-        let adc_t = *adc_t.as_ref() as f64;
+fn calibrate_temperature(
+    calibrator: &Calibrator,
+    adc_t: AdcTemperature,
+) -> (Temperature, FineTemperature) {
+    let Calibrator { t1, t2, t3, .. } = calibrator;
 
-        let var1 = (adc_t / 16384.0 - t1 / 1024.0) * t2;
-        let var2 = ((adc_t / 131072.0 - t1 / 8192.0) * (adc_t / 131072.0 - t1 / 8192.0)) * t3;
-        let t_fine = var1 + var2;
-        let t = t_fine / 5120.0;
+    let adc_t = *adc_t.as_ref() as f64;
 
-        (Temperature(t), FineTemperature(t_fine))
-    }
+    let var1 = (adc_t / 16384.0 - t1 / 1024.0) * t2;
+    let var2 = ((adc_t / 131072.0 - t1 / 8192.0) * (adc_t / 131072.0 - t1 / 8192.0)) * t3;
+    let t_fine = var1 + var2;
+    let t = t_fine / 5120.0;
+
+    (Temperature(t), FineTemperature(t_fine))
 }
 
 #[derive(Copy, Clone)]
