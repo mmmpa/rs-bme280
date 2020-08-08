@@ -3,7 +3,7 @@ use i2cdev::core::I2CDevice;
 use i2cdev::linux::{LinuxI2CDevice, LinuxI2CError};
 
 pub struct Bme280Client {
-    i2c_cli: LinuxI2CDevice,
+    pub i2c_cli: LinuxI2CDevice,
 }
 
 impl I2c for Bme280Client {

@@ -389,23 +389,23 @@ pub trait Bme280 {
     }
 
     fn get_adc_humidity(&mut self) -> Bme280Result<AdcHumidity> {
-        let l = self.i2c().read_byte_data(RegisterAddress::HumL)? as u16;
-        let m = self.i2c().read_byte_data(RegisterAddress::HumM)? as u16;
+        let l = self.i2c().read_byte_data(RegisterAddress::HumM)? as u16;
+        let m = self.i2c().read_byte_data(RegisterAddress::HumL)? as u16;
 
         Ok(AdcHumidity((l << 8) | m))
     }
 
     fn get_adc_pressure(&mut self) -> Bme280Result<AdcPressure> {
-        let l = self.i2c().read_byte_data(RegisterAddress::PressL)? as u32;
-        let m = self.i2c().read_byte_data(RegisterAddress::PressM)? as u32;
+        let l = self.i2c().read_byte_data(RegisterAddress::PressM)? as u32;
+        let m = self.i2c().read_byte_data(RegisterAddress::PressL)? as u32;
         let xl = self.i2c().read_byte_data(RegisterAddress::PressXl)? as u32;
 
         Ok(AdcPressure((l << 12) | (m << 4) | (xl >> 4)))
     }
 
     fn get_adc_temperature(&mut self) -> Bme280Result<AdcTemperature> {
-        let l = self.i2c().read_byte_data(RegisterAddress::TempL)? as u32;
-        let m = self.i2c().read_byte_data(RegisterAddress::TempM)? as u32;
+        let l = self.i2c().read_byte_data(RegisterAddress::TempM)? as u32;
+        let m = self.i2c().read_byte_data(RegisterAddress::TempL)? as u32;
         let xl = self.i2c().read_byte_data(RegisterAddress::TempXl)? as u32;
 
         Ok(AdcTemperature((l << 12) | (m << 4) | (xl >> 4)))
@@ -477,7 +477,8 @@ fn calibrate_pressure(
     var2 = p * (p8) / 32768.0;
     p = p + (var1 + var2 + (p7)) / 16.0;
 
-    Pressure(p)
+    // from Pa to hPa
+    Pressure(p / 100.0)
 }
 
 fn calibrate_temperature(
@@ -496,20 +497,20 @@ fn calibrate_temperature(
     (Temperature(t), FineTemperature(t_fine))
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct AdcTemperature(u32);
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct AdcPressure(u32);
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct AdcHumidity(u16);
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct Temperature(f64);
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct FineTemperature(f64);
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct Pressure(f64);
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct Humidity(f64);
 
 impl AsRef<u32> for AdcTemperature {

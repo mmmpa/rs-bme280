@@ -1,2 +1,2 @@
 #[cfg(feature = "std")]
-mod unix;
+pub mod unix;
