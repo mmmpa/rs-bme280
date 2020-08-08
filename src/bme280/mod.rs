@@ -187,9 +187,9 @@ pub trait Bme280 {
     }
 
     fn get_results(&self) -> Bme280Result<(AdcTemperature, AdcHumidity, AdcPressure)> {
-        let adc_t = self.get_temperature()?;
-        let adc_h = self.get_humidity()?;
-        let adc_p = self.get_pressure()?;
+        let adc_t = self.get_adc_temperature()?;
+        let adc_h = self.get_adc_humidity()?;
+        let adc_p = self.get_adc_pressure()?;
 
         Ok((adc_t, adc_h, adc_p))
     }
@@ -207,14 +207,14 @@ pub trait Bme280 {
         Ok((t, h, p))
     }
 
-    fn get_humidity(&self) -> Bme280Result<AdcHumidity> {
+    fn get_adc_humidity(&self) -> Bme280Result<AdcHumidity> {
         let l = self.i2c().read_byte_data(RegisterAddress::HumL)? as u16;
         let m = self.i2c().read_byte_data(RegisterAddress::HumM)? as u16;
 
         Ok(AdcHumidity((l << 8) | m))
     }
 
-    fn get_pressure(&self) -> Bme280Result<AdcPressure> {
+    fn get_adc_pressure(&self) -> Bme280Result<AdcPressure> {
         let l = self.i2c().read_byte_data(RegisterAddress::PressL)? as u32;
         let m = self.i2c().read_byte_data(RegisterAddress::PressM)? as u32;
         let xl = self.i2c().read_byte_data(RegisterAddress::PressXl)? as u32;
@@ -222,7 +222,7 @@ pub trait Bme280 {
         Ok(AdcPressure((l << 12) | (m << 4) | (xl >> 4)))
     }
 
-    fn get_temperature(&self) -> Bme280Result<AdcTemperature> {
+    fn get_adc_temperature(&self) -> Bme280Result<AdcTemperature> {
         let l = self.i2c().read_byte_data(RegisterAddress::TempL)? as u32;
         let m = self.i2c().read_byte_data(RegisterAddress::TempM)? as u32;
         let xl = self.i2c().read_byte_data(RegisterAddress::TempXl)? as u32;
