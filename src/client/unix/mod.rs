@@ -1,12 +1,35 @@
-use crate::{Bme280, Bme280Error, Bme280Result, I2c, RegisterAddress};
+use crate::*;
 use i2cdev::core::I2CDevice;
 use i2cdev::linux::{LinuxI2CDevice, LinuxI2CError};
 
 pub struct Bme280Client {
-    pub i2c_cli: LinuxI2CDevice,
+    core: Bme280CoreClient,
 }
 
-impl I2c for Bme280Client {
+impl Bme280Client {
+    pub fn new(i2c_cli: LinuxI2CDevice) -> Self {
+        let core = Bme280CoreClient { i2c_cli };
+        Self { core }
+    }
+}
+
+pub struct Bme280CoreClient {
+    i2c_cli: LinuxI2CDevice,
+}
+
+impl Bme280 for Bme280Client {
+    type Bme280Core = Bme280CoreClient;
+
+    fn core(&self) -> &Self::Bme280Core {
+        &self.core
+    }
+
+    fn core_mut(&mut self) -> &mut Self::Bme280Core {
+        &mut self.core
+    }
+}
+
+impl I2c for Bme280CoreClient {
     fn write_i2c_block_data(&mut self, reg: RegisterAddress, data: &[u8]) -> Bme280Result<()> {
         self.i2c_cli.smbus_write_block_data(reg as u8, data)?;
         Ok(())
@@ -33,8 +56,8 @@ impl I2c for Bme280Client {
     }
 }
 
-impl Bme280 for Bme280Client {
-    type I2c = Bme280Client;
+impl Bme280Core for Bme280CoreClient {
+    type I2c = Bme280CoreClient;
 
     fn i2c(&mut self) -> &mut Self::I2c {
         self
