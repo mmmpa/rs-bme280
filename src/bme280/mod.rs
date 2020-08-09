@@ -219,17 +219,17 @@ impl Status {
     }
 }
 
-pub struct SetUp {
-    humidity_sampling: HumidityOverSamplingControl,
-    temperature_sampling: TemperatureOverSamplingControl,
-    pressure_sampling: PressureOverSamplingControl,
-    sensor_mode: SensorModeControl,
-    duration: InactiveDurationControl,
-    iir: InfiniteImpulseResponseControl,
-    spi: Spi3,
+pub struct SetUpParams {
+    pub humidity_sampling: HumidityOverSamplingControl,
+    pub temperature_sampling: TemperatureOverSamplingControl,
+    pub pressure_sampling: PressureOverSamplingControl,
+    pub sensor_mode: SensorModeControl,
+    pub duration: InactiveDurationControl,
+    pub iir: InfiniteImpulseResponseControl,
+    pub spi: Spi3,
 }
 
-impl Default for SetUp {
+impl Default for SetUpParams {
     fn default() -> Self {
         Self {
             humidity_sampling: HumidityOverSamplingControl::OverSampling1,
@@ -248,8 +248,8 @@ pub trait Bme280 {
     fn core(&self) -> &Self::Bme280Core;
     fn core_mut(&mut self) -> &mut Self::Bme280Core;
 
-    fn set_up(&mut self, params: SetUp) -> Bme280Result<()> {
-        let SetUp {
+    fn set_up(&mut self, params: SetUpParams) -> Bme280Result<()> {
+        let SetUpParams {
             humidity_sampling,
             temperature_sampling,
             pressure_sampling,
