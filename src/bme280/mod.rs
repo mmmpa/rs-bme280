@@ -174,7 +174,6 @@ const CALIBRATIONS: [RegisterAddress; 32] = [
 ];
 
 pub trait I2c {
-    fn write_i2c_block_data(&mut self, reg: RegisterAddress, data: &[u8]) -> Bme280Result<()>;
     fn write_byte_data(&mut self, reg: RegisterAddress, data: u8) -> Bme280Result<()>;
     fn read_byte_data(&mut self, reg: RegisterAddress) -> Bme280Result<u8>;
     fn read_i2c_block_data(&mut self, reg: RegisterAddress, data: &mut [u8]) -> Bme280Result<()>;
@@ -245,7 +244,6 @@ impl Default for SetUpParams {
 pub trait Bme280 {
     type Bme280Core: Bme280Core;
 
-    fn core(&self) -> &Self::Bme280Core;
     fn core_mut(&mut self) -> &mut Self::Bme280Core;
 
     fn set_up(&mut self, params: SetUpParams) -> Bme280Result<()> {

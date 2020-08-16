@@ -2,6 +2,8 @@
 pub enum Bme280Error {
     #[cfg(feature = "std")]
     I2cError(String),
+    #[cfg(feature = "embedded")]
+    I2cError(&'static str),
 }
 
 #[cfg(feature = "std")]
