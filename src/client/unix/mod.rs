@@ -1,6 +1,7 @@
 use crate::*;
 use i2cdev::core::I2CDevice;
 use i2cdev::linux::{LinuxI2CDevice, LinuxI2CError};
+use std::path::Path;
 
 pub struct Bme280Client {
     core: Bme280CoreClient,
@@ -11,6 +12,19 @@ impl Bme280Client {
         let core = Bme280CoreClient { i2c_cli };
         Self { core }
     }
+
+    pub fn new_with_path_and_address_hex<P: AsRef<Path>>(
+        path: P,
+        address_hex: &str,
+    ) -> Bme280Result<Self> {
+        let address = u16::from_str_radix(&address_hex[2..], 16).unwrap();
+        debug!("address: {}", address);
+
+        let i2c_cli = LinuxI2CDevice::new(path, address)?;
+        let core = Bme280CoreClient { i2c_cli };
+
+        Ok(Self { core })
+    }
 }
 
 pub struct Bme280CoreClient {
@@ -20,21 +34,12 @@ pub struct Bme280CoreClient {
 impl Bme280 for Bme280Client {
     type Bme280Core = Bme280CoreClient;
 
-    fn core(&self) -> &Self::Bme280Core {
-        &self.core
-    }
-
     fn core_mut(&mut self) -> &mut Self::Bme280Core {
         &mut self.core
     }
 }
 
 impl I2c for Bme280CoreClient {
-    fn write_i2c_block_data(&mut self, reg: RegisterAddress, data: &[u8]) -> Bme280Result<()> {
-        self.i2c_cli.smbus_write_block_data(reg as u8, data)?;
-        Ok(())
-    }
-
     fn write_byte_data(&mut self, reg: RegisterAddress, data: u8) -> Bme280Result<()> {
         self.i2c_cli.smbus_write_byte_data(reg as u8, data)?;
         Ok(())
